@@ -1,68 +1,34 @@
 from rag import rag_answer
-from llm import llm
+from adaptive_questions import generate_followup_questions
 import json
 
-# 🔁 Toggle this to False to go back to fixed questions
+
 USE_ADAPTIVE_QUESTIONS = True
-
-FIXED_QUESTIONS = [
-    "Do you have a fever?",
-    "Are you experiencing cough, cold, or sore throat?",
-    "Do you have body pain or headache?",
-    "Have you felt nausea, vomiting, or loose motions?",
-    "Are you having any breathing difficulty?",
-    "Have you travelled recently?"
-]
-
-
-def generate_followup_questions(symptom_text):
-    """
-    Uses LLM to generate adaptive follow-up questions
-    """
-    prompt = f"""
-You are a healthcare assistant.
-
-User described symptoms:
-{symptom_text}
-
-Task:
-- Identify the symptom category
-- Ask ONLY 3 relevant follow-up questions
-- Questions must be short and yes/no or simple
-- Do NOT repeat generic questions unnecessarily
-- Do NOT give medical advice
-
-Return ONLY the questions, one per line.
-"""
-
-    try:
-        response = llm.invoke(prompt)
-        questions = [
-            line.strip("- ").strip()
-            for line in response.split("\n")
-            if line.strip()
-        ]
-        return questions[:3]
-    except Exception:
-        return []
 
 
 def collect_symptoms():
     print("\n🤖 Carenova Health Assistant")
     print("Hi, I’m here to help you. Let’s talk about how you’re feeling.\n")
 
+    # Step 1: Free-text symptoms
     initial_symptoms = input("Describe your symptoms:\n> ")
     answers = [f"Initial symptoms: {initial_symptoms}"]
 
+    # Step 2: Adaptive follow-ups
     if USE_ADAPTIVE_QUESTIONS:
         followups = generate_followup_questions(initial_symptoms)
 
-        # fallback to fixed questions if LLM fails
+        # Safe fallback if LLM fails
         if not followups:
-            followups = FIXED_QUESTIONS
+            followups = [
+                "How long have you had these symptoms?",
+                "Are the symptoms getting worse?",
+                "Anything else unusual you noticed?"
+            ]
     else:
-        followups = FIXED_QUESTIONS
+        followups = []
 
+    # Step 3: Ask follow-up questions
     for question in followups:
         answer = input(question + "\n> ")
         answers.append(f"{question} Answer: {answer}")
@@ -71,15 +37,11 @@ def collect_symptoms():
 
 
 def calculate_severity(symptom_text):
-    symptom_text = symptom_text.lower()
+    text = symptom_text.lower()
 
-    if "breathing difficulty" in symptom_text or "shortness of breath" in symptom_text:
+    if any(k in text for k in ["breathing difficulty", "shortness of breath", "chest pain"]):
         return "🔴 Severe"
-    if "chest pain" in symptom_text:
-        return "🔴 Severe"
-    if "high fever" in symptom_text:
-        return "🟡 Moderate"
-    if "vomiting" in symptom_text or "loose motions" in symptom_text:
+    if any(k in text for k in ["vomiting", "loose motions", "high fever"]):
         return "🟡 Moderate"
 
     return "🟢 Mild"
@@ -87,13 +49,12 @@ def calculate_severity(symptom_text):
 
 def calculate_confidence(symptom_text, severity):
     score = 60
+    text = symptom_text.lower()
 
-    if "fever" in symptom_text.lower():
-        score += 10
-    if "cough" in symptom_text.lower():
-        score += 10
-    if "breathing difficulty" in symptom_text.lower():
-        score += 10
+    for k in ["fever", "cough", "tired", "weak", "thirst", "urinate", "hunger", "weight"]:
+        if k in text:
+            score += 5
+
     if severity == "🔴 Severe":
         score += 10
 
@@ -116,15 +77,51 @@ def analyze(symptom_text):
 
     rag_data = rag_answer(symptom_text)
 
-    # 🔹 SAFETY FALLBACK
+    # 🔒 SMART, SYMPTOM-AWARE FALLBACK
+    text = symptom_text.lower()
+
+    METABOLIC_KEYWORDS = [
+        "urinate", "thirst", "tired", "fatigue",
+        "hunger", "appetite", "weight"
+    ]
+
     if not rag_data.get("possible_conditions"):
-        rag_data = {
-            "possible_conditions": ["Common viral infection"],
-            "explanation": ["Symptoms suggest a mild viral illness"],
-            "home_care_tips": ["Rest", "Hydration", "Monitor symptoms"],
-            "when_to_see_doctor": ["If symptoms worsen or persist"],
-            "disclaimer": "This is not a medical diagnosis."
-        }
+        if any(k in text for k in METABOLIC_KEYWORDS):
+            rag_data = {
+                "possible_conditions": [
+                    "Metabolic condition (possible blood sugar imbalance)"
+                ],
+                "explanation": [
+                    "Frequent urination, increased thirst, fatigue, and appetite or weight changes may be associated with blood sugar regulation issues"
+                ],
+                "home_care_tips": [
+                    "Maintain hydration",
+                    "Avoid excessive sugary foods",
+                    "Follow a balanced diet",
+                    "Monitor symptoms"
+                ],
+                "when_to_see_doctor": [
+                    "If symptoms persist beyond a few days",
+                    "For blood sugar testing or medical evaluation"
+                ],
+                "disclaimer": "This is not a medical diagnosis."
+            }
+        else:
+            rag_data = {
+                "possible_conditions": ["General health condition"],
+                "explanation": [
+                    "Based on the symptoms, a specific condition could not be confidently identified"
+                ],
+                "home_care_tips": [
+                    "Rest",
+                    "Stay hydrated",
+                    "Monitor symptoms closely"
+                ],
+                "when_to_see_doctor": [
+                    "If symptoms persist or worsen"
+                ],
+                "disclaimer": "This is not a medical diagnosis."
+            }
 
     return {
         "severity": severity,
@@ -133,10 +130,7 @@ def analyze(symptom_text):
         "explanation": normalize_list(rag_data.get("explanation")),
         "home_care_tips": normalize_list(rag_data.get("home_care_tips")),
         "when_to_see_doctor": normalize_list(rag_data.get("when_to_see_doctor")),
-        "disclaimer": rag_data.get(
-            "disclaimer",
-            "This is not a medical diagnosis."
-        )
+        "disclaimer": rag_data.get("disclaimer")
     }
 
 

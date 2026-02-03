@@ -1,44 +1,93 @@
 import streamlit as st
 from chatbot import analyze
+from adaptive_questions import generate_followup_questions
 
 st.set_page_config(page_title="Carenova Health Assistant", page_icon="🤖")
-
 st.title("🤖 Carenova AI Health Assistant")
-st.write("Answer the questions below to get health guidance.")
+st.write("Tell me how you're feeling, and I’ll guide you step by step.")
+
+# -------------------------------
+# SESSION STATE INITIALIZATION
+# -------------------------------
+if "stage" not in st.session_state:
+    st.session_state.stage = "initial"
+    st.session_state.symptom_text = ""
+    st.session_state.followup_questions = []
+    st.session_state.answers = []
+    st.session_state.current_q = 0
+    st.session_state.result = None
 
 
-# QUESTIONS
-QUESTIONS = [
-    "What symptoms are you experiencing?",
-    "Do you have a fever?",
-    "Do you have cough, cold, or sore throat?",
-    "Do you have body pain or headache?",
-    "Any nausea, vomiting, or loose motions?",
-    "Any breathing difficulty?",
-    "Recent travel history?"
-]
+# -------------------------------
+# STAGE 1: INITIAL SYMPTOMS
+# -------------------------------
+if st.session_state.stage == "initial":
+    user_input = st.text_input(
+        "What symptoms are you experiencing?",
+        placeholder="e.g. urinating often, thirsty, tired"
+    )
+
+    if st.button("Next ➡️") and user_input.strip():
+        st.session_state.symptom_text = f"Initial symptoms: {user_input}"
+
+        # Generate adaptive questions
+        questions = generate_followup_questions(user_input)
+
+        # Safe fallback
+        if not questions:
+            questions = [
+                "How long have you had these symptoms?",
+                "Are the symptoms getting worse?",
+                "Anything else unusual you noticed?"
+            ]
+
+        st.session_state.followup_questions = questions
+        st.session_state.stage = "followup"
+        st.rerun()
 
 
-# Initialize session state
-if "responses" not in st.session_state:
-    print("session not created")
-    st.session_state.responses = {}
+# -------------------------------
+# STAGE 2: ADAPTIVE FOLLOW-UP
+# -------------------------------
+elif st.session_state.stage == "followup":
+    q_index = st.session_state.current_q
+    question = st.session_state.followup_questions[q_index]
 
-# Form for inputs (STABLE)
-with st.form("health_form"):
-    for q in QUESTIONS:
-        st.session_state.responses[q] = st.text_input(q)
+    st.markdown(f"**{question}**")
+    answer = st.text_input("Your answer", key=f"answer_{q_index}")
 
-    submitted = st.form_submit_button("🧠 Analyze Symptoms")
+    if st.button("Next ➡️"):
+        if answer.strip():
+            st.session_state.answers.append(
+                f"{question} Answer: {answer}"
+            )
+            st.session_state.current_q += 1
 
-# On submit
-if submitted:
-    with st.spinner("Analyzing your symptoms..."):
-        symptom_text = ""
-        for q, a in st.session_state.responses.items():
-            symptom_text += f"{q} Answer: {a}\n"
+            if st.session_state.current_q >= len(st.session_state.followup_questions):
+                st.session_state.stage = "analyze"
 
-        result = analyze(symptom_text)
+            st.rerun()
+
+
+# -------------------------------
+# STAGE 3: ANALYSIS
+# -------------------------------
+elif st.session_state.stage == "analyze":
+    with st.spinner("🧠 Analyzing your symptoms..."):
+        full_text = st.session_state.symptom_text + "\n"
+        full_text += "\n".join(st.session_state.answers)
+
+        st.session_state.result = analyze(full_text)
+
+    st.session_state.stage = "result"
+    st.rerun()
+
+
+# -------------------------------
+# STAGE 4: RESULT DISPLAY
+# -------------------------------
+elif st.session_state.stage == "result":
+    result = st.session_state.result
 
     st.success("Analysis Complete ✅")
 
@@ -64,3 +113,7 @@ if submitted:
         st.write(f"- {w}")
 
     st.caption(result["disclaimer"])
+
+    if st.button("🔄 Start New Assessment"):
+        st.session_state.clear()
+        st.rerun()
