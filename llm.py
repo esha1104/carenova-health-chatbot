@@ -2,7 +2,7 @@ from langchain_ollama import OllamaLLM
 
 llm = OllamaLLM(
     model="llama3.2:1b",
-    temperature=0.2,
-    num_ctx=1024,
-    num_predict=200
+    temperature=0.1,     # lower = more structured
+    num_ctx=2048,       # more thinking space
+    num_predict=512     # ⭐ THIS FIXES YOUR JSON CUTTING
 )

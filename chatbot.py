@@ -2,7 +2,6 @@ from rag import rag_answer
 from adaptive_questions import generate_followup_questions
 import json
 
-
 USE_ADAPTIVE_QUESTIONS = True
 
 
@@ -10,15 +9,12 @@ def collect_symptoms():
     print("\n🤖 Carenova Health Assistant")
     print("Hi, I’m here to help you. Let’s talk about how you’re feeling.\n")
 
-    # Step 1: Free-text symptoms
     initial_symptoms = input("Describe your symptoms:\n> ")
-    answers = [f"Initial symptoms: {initial_symptoms}"]
+    answers = [initial_symptoms]
 
-    # Step 2: Adaptive follow-ups
     if USE_ADAPTIVE_QUESTIONS:
         followups = generate_followup_questions(initial_symptoms)
 
-        # Safe fallback if LLM fails
         if not followups:
             followups = [
                 "How long have you had these symptoms?",
@@ -28,37 +24,62 @@ def collect_symptoms():
     else:
         followups = []
 
-    # Step 3: Ask follow-up questions
     for question in followups:
         answer = input(question + "\n> ")
-        answers.append(f"{question} Answer: {answer}")
+        answers.append(answer)
 
-    return "\n".join(answers)
+    return " | ".join(answers)
 
 
 def calculate_severity(symptom_text):
     text = symptom_text.lower()
 
-    if any(k in text for k in ["breathing difficulty", "shortness of breath", "chest pain"]):
-        return "🔴 Severe"
-    if any(k in text for k in ["vomiting", "loose motions", "high fever"]):
-        return "🟡 Moderate"
+    severe_keywords = [
+        "chest pain",
+        "shortness of breath",
+        "breathing difficulty",
+        "confusion",
+        "bluish lips",
+        "seizure",
+        "unconscious",
+        "vomiting blood",
+        "severe bleeding"
+    ]
 
-    return "🟢 Mild"
+    moderate_keywords = [
+        "high fever",
+        "persistent vomiting",
+        "severe weakness"
+    ]
+
+    if any(k in text for k in severe_keywords):
+        return "Severe"
+
+    if any(k in text for k in moderate_keywords):
+        return "Moderate"
+
+    return "Mild"
 
 
 def calculate_confidence(symptom_text, severity):
-    score = 60
+    score = 65
     text = symptom_text.lower()
 
-    for k in ["fever", "cough", "tired", "weak", "thirst", "urinate", "hunger", "weight"]:
-        if k in text:
-            score += 5
+    smart_keywords = [
+        "thirst", "urination", "fatigue",
+        "weight loss", "blurred vision",
+        "fever", "cough", "rash",
+        "pain", "headache"
+    ]
 
-    if severity == "🔴 Severe":
+    for k in smart_keywords:
+        if k in text:
+            score += 4
+
+    if severity == "Severe":
         score += 10
 
-    return min(score, 95)
+    return min(score, 96)
 
 
 def normalize_list(value):
@@ -70,6 +91,7 @@ def normalize_list(value):
 
 
 def analyze(symptom_text):
+
     print("\n🧠 Analyzing your symptoms...\n")
 
     severity = calculate_severity(symptom_text)
@@ -77,51 +99,19 @@ def analyze(symptom_text):
 
     rag_data = rag_answer(symptom_text)
 
-    # 🔒 SMART, SYMPTOM-AWARE FALLBACK
-    text = symptom_text.lower()
-
-    METABOLIC_KEYWORDS = [
-        "urinate", "thirst", "tired", "fatigue",
-        "hunger", "appetite", "weight"
-    ]
-
-    if not rag_data.get("possible_conditions"):
-        if any(k in text for k in METABOLIC_KEYWORDS):
-            rag_data = {
-                "possible_conditions": [
-                    "Metabolic condition (possible blood sugar imbalance)"
-                ],
-                "explanation": [
-                    "Frequent urination, increased thirst, fatigue, and appetite or weight changes may be associated with blood sugar regulation issues"
-                ],
-                "home_care_tips": [
-                    "Maintain hydration",
-                    "Avoid excessive sugary foods",
-                    "Follow a balanced diet",
-                    "Monitor symptoms"
-                ],
-                "when_to_see_doctor": [
-                    "If symptoms persist beyond a few days",
-                    "For blood sugar testing or medical evaluation"
-                ],
-                "disclaimer": "This is not a medical diagnosis."
-            }
-        else:
-            rag_data = {
-                "possible_conditions": ["General health condition"],
-                "explanation": [
-                    "Based on the symptoms, a specific condition could not be confidently identified"
-                ],
-                "home_care_tips": [
-                    "Rest",
-                    "Stay hydrated",
-                    "Monitor symptoms closely"
-                ],
-                "when_to_see_doctor": [
-                    "If symptoms persist or worsen"
-                ],
-                "disclaimer": "This is not a medical diagnosis."
-            }
+    # Safe fallback
+    if (
+        not rag_data
+        or "possible_conditions" not in rag_data
+        or not rag_data["possible_conditions"]
+    ):
+        rag_data = {
+            "possible_conditions": ["Medical evaluation recommended"],
+            "explanation": ["Symptoms were not strongly matched."],
+            "home_care_tips": ["Rest", "Stay hydrated", "Monitor symptoms"],
+            "when_to_see_doctor": ["If symptoms persist or worsen"],
+            "disclaimer": "This is not a medical diagnosis."
+        }
 
     return {
         "severity": severity,
@@ -138,5 +128,5 @@ if __name__ == "__main__":
     symptoms = collect_symptoms()
     result = analyze(symptoms)
 
-    print("\n📋 Carenova's Guidance (JSON Output):\n")
+    print("\n📋 Carenova's Guidance:\n")
     print(json.dumps(result, indent=4))
