@@ -1,71 +1,97 @@
 import os
 import shutil
-from functools import partial
-
-from langchain_community.document_loaders import DirectoryLoader, TextLoader
+from pathlib import Path
+from pydantic import SecretStr
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_ollama import OllamaEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from logger import get_logger
+from config import (
+    MEDICAL_KNOWLEDGE_PATH,
+    FAISS_INDEX_DIR,
+    EMBEDDINGS_MODEL,
+    OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL,
+)
 
+logger = get_logger(__name__)
 
-DATA_PATH = "medical_knowledge"
-CHROMA_PATH = "chroma_db"
-
+def load_markdown_files(data_path: str) -> list:
+    """Load all markdown files from a directory hierarchy."""
+    documents = []
+    data_dir = Path(data_path)
+    
+    if not data_dir.exists():
+        logger.warning(f"📁 Data path does not exist: {data_path}")
+        return documents
+    
+    for md_file in data_dir.rglob("*.md"):
+        try:
+            content = md_file.read_text(encoding="utf-8")
+            doc = Document(
+                page_content=content,
+                metadata={"source": md_file.name}
+            )
+            documents.append(doc)
+            logger.debug(f"✓ Loaded: {md_file.name}")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to load {md_file.name}: {e}")
+    
+    return documents
 
 def ingest_documents():
-
+    """Load documents, chunk, and create FAISS vector DB using OpenRouter embeddings."""
+    
     # ✅ Delete OLD DB FIRST
-    if os.path.exists(CHROMA_PATH):
-        print("Deleting old vector database...")
-        shutil.rmtree(CHROMA_PATH, ignore_errors=True)
+    if os.path.exists(FAISS_INDEX_DIR):
+        logger.info(f"🗑️  Deleting old vector database at {FAISS_INDEX_DIR}...")
+        shutil.rmtree(FAISS_INDEX_DIR, ignore_errors=True)
 
-    print("Loading markdown files...")
+    logger.info("📄 Loading markdown files...")
+    documents = load_markdown_files(MEDICAL_KNOWLEDGE_PATH)
+    
+    if not documents:
+        logger.error(f"❌ No documents found in {MEDICAL_KNOWLEDGE_PATH}")
+        return
+    
+    logger.info(f"✅ Loaded {len(documents)} documents")
 
-    loader = DirectoryLoader(
-        DATA_PATH,
-        glob="**/*.md",
-        loader_cls=partial(TextLoader, encoding="utf-8", autodetect_encoding=True)
-    )
-
-    documents = loader.load()
-    print(f"Total documents loaded: {len(documents)}")
-
-    # Attach metadata
-    for doc in documents:
-        doc.metadata["source"] = os.path.basename(doc.metadata["source"])
-
-    # ✅ Medical-optimized chunking (very good choice btw)
+    # ✅ Medical-optimized chunking
+    logger.info("✂️  Chunking documents...")
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=350,
-        chunk_overlap=120,
-        separators=[
-            "\n## ",
-            "\n### ",
-            "\n- ",
-            "\n",
-            " "
-        ]
+        chunk_size=500,
+        chunk_overlap=100,
+        separators=["\n## ", "\n### ", "\n- ", "\n", " "],
     )
-
     chunks = splitter.split_documents(documents)
-    print(f"Total chunks created: {len(chunks)}")
+    logger.info(f"✅ Created {len(chunks)} chunks")
 
-    embeddings = OllamaEmbeddings(
-        model="nomic-embed-text"
-    )
+    # Initialize OpenRouter embeddings (via OpenAI-compatible API)
+    try:
+        if not OPENROUTER_API_KEY:
+            raise ValueError("OPENROUTER_API_KEY not set in .env")
+        
+        logger.info(f"🔑 Using OpenRouter for embeddings: {EMBEDDINGS_MODEL}")
+        embeddings = OpenAIEmbeddings(
+            api_key=SecretStr(OPENROUTER_API_KEY),
+            model=EMBEDDINGS_MODEL,
+            base_url=OPENROUTER_BASE_URL
+        )
 
-    vectordb = Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        persist_directory=CHROMA_PATH
-    )
+        logger.info("🗄️  Creating FAISS vector database...")
+        vectordb = FAISS.from_documents(
+            documents=chunks,
+            embedding=embeddings
+        )
 
-    # ✅ VERY IMPORTANT (prevents Windows lock)
-    vectordb.persist()
-    del vectordb
+        # ✅ Save FAISS index
+        vectordb.save_local(FAISS_INDEX_DIR)
+        logger.info(f"✅ Vector database successfully saved to {FAISS_INDEX_DIR}")
 
-    print("✅ Vector database created successfully!")
-
+    except Exception as e:
+        logger.error(f"❌ Failed to create vector database: {e}")
+        raise
 
 if __name__ == "__main__":
     ingest_documents()

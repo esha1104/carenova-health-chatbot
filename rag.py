@@ -1,46 +1,99 @@
 import json
-from langchain_chroma import Chroma
-from langchain_ollama import OllamaEmbeddings
-from llm import llm
-
-
-CHROMA_DIR = "chroma_db"
-
-# MUST match ingest.py
-embeddings = OllamaEmbeddings(
-    model="nomic-embed-text"
+import os
+from langchain_community.vectorstores import FAISS
+from langchain_openai import OpenAIEmbeddings
+from pydantic import SecretStr
+from llm import get_llm
+from logger import get_logger
+from config import (
+    FAISS_INDEX_DIR,
+    EMBEDDINGS_MODEL,
+    RAG_SCORE_THRESHOLD,
+    RAG_K_RESULTS,
+    RAG_CACHE_ENABLED,
+    OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL
 )
 
-vectordb = Chroma(
-    persist_directory=CHROMA_DIR,
-    embedding_function=embeddings
-)
+logger = get_logger(__name__)
 
-retriever = vectordb.as_retriever(
-    search_type="similarity_score_threshold",
-    search_kwargs={
-        "score_threshold": 0.55,
-        "k": 5
-    }
-)
+# Simple in-memory cache for RAG responses
+_rag_cache = {}
 
-
-def rag_answer(query: str):
-
-    docs = retriever.invoke(query)
-
-    print("\n========== RETRIEVED DOCS ==========\n")
-    for d in docs:
-        print(d.metadata)
-        print(d.page_content[:300])
-        print("\n------------------\n")
-
-    context = "\n\n".join(
-        f"Source: {doc.metadata.get('source','unknown')}\n{doc.page_content}"
-        for doc in docs
+# Initialize embeddings using OpenRouter (via OpenAI-compatible API)
+try:
+    if not OPENROUTER_API_KEY:
+        raise ValueError("OPENROUTER_API_KEY not set in .env")
+    
+    embeddings = OpenAIEmbeddings(
+        api_key=SecretStr(OPENROUTER_API_KEY),
+        model=EMBEDDINGS_MODEL,
+        base_url=OPENROUTER_BASE_URL
     )
+    logger.info(f"✅ Using OpenRouter for embeddings: {EMBEDDINGS_MODEL}")
+    
+    # Load FAISS vector store
+    if os.path.exists(FAISS_INDEX_DIR):
+        vectordb = FAISS.load_local(
+            FAISS_INDEX_DIR, 
+            embeddings, 
+            allow_dangerous_deserialization=True
+        )
+        retriever = vectordb.as_retriever(
+            search_kwargs={"k": RAG_K_RESULTS}
+        )
+        logger.info(f"✅ Vector DB initialized from {FAISS_INDEX_DIR}")
+    else:
+        logger.warning(f"⚠️  Vector DB directory {FAISS_INDEX_DIR} not found. Retrieval will be disabled.")
+        retriever = None
+except Exception as e:
+    logger.error(f"❌ Failed to initialize vector DB: {e}")
+    retriever = None
 
-    prompt = f"""
+
+def rag_answer(query: str) -> dict:
+    """
+    Retrieve and analyze medical context for given query.
+    Uses caching to avoid redundant vector DB lookups.
+    """
+    raw_response = ""  # Initialize to avoid unbound variable error
+    
+    # Check cache
+    if RAG_CACHE_ENABLED and query in _rag_cache:
+        logger.debug(f"📦 Cache hit for query: {query[:50]}...")
+        return _rag_cache[query]
+    
+    # Fallback if retriever not initialized
+    if retriever is None:
+        logger.warning("⚠️  Vector DB not available, using fallback")
+        return {
+            "possible_conditions": ["Medical evaluation recommended"],
+            "explanation": ["Vector database unavailable."],
+            "home_care_tips": ["Rest", "Stay hydrated", "Monitor symptoms"],
+            "when_to_see_doctor": ["Consult a healthcare professional."],
+            "disclaimer": "This is not a medical diagnosis."
+        }
+
+    try:
+        docs = retriever.invoke(query)
+        logger.info(f"📄 Retrieved {len(docs)} documents for query")
+
+        if not docs:
+            logger.warning(f"⚠️  No documents matched query threshold")
+            return {
+                "possible_conditions": ["Medical evaluation recommended"],
+                "explanation": ["No strong medical matches found."],
+                "home_care_tips": ["Rest", "Stay hydrated", "Monitor symptoms"],
+                "when_to_see_doctor": ["If symptoms persist or worsen."],
+                "disclaimer": "This is not a medical diagnosis."
+            }
+
+        context = "\n\n".join(
+            f"Source: {doc.metadata.get('source','unknown')}\n{doc.page_content}"
+            for doc in docs
+        )
+
+        prompt = f"""
 You are Carenova, a cautious AI healthcare assistant.
 
 STRICT RULES:
@@ -75,27 +128,48 @@ IMPORTANT:
 - Output MUST be valid JSON
 """
 
-    raw_response = llm.invoke(prompt)
+        llm = get_llm()
+        response_message = llm.invoke(prompt)
+        raw_response = response_message.content if hasattr(response_message, 'content') else str(response_message)
+        
+        logger.debug(f"🤖 LLM response received: {len(raw_response)} chars")
 
-    # ⭐ CLEAN RESPONSE
-    raw_response = raw_response.strip()
+        # Clean response
+        raw_response = raw_response.strip() if isinstance(raw_response, str) else str(raw_response).strip()
 
-    # ⭐ AUTO FIX — small models often forget last bracket
-    if not raw_response.endswith("}"):
-        raw_response += "}"
+        # Auto-fix truncated JSON
+        if not raw_response.endswith("}"):
+            raw_response += "}"
 
-    try:
-        return json.loads(raw_response)
+        result = json.loads(raw_response)
+        
+        # Cache result
+        if RAG_CACHE_ENABLED:
+            _rag_cache[query] = result
+        
+        logger.info(f"✅ Analysis complete: {', '.join(result.get('possible_conditions', []))}")
+        return result
 
-    except json.JSONDecodeError:
-
-        print("⚠️ STILL invalid JSON:")
-        print(raw_response)
-
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON parse error: {e}")
+        # Use content attribute if it's an AIMessage object, otherwise string slice
+        error_snippet = raw_response[:200] if isinstance(raw_response, str) else "Unable to display response"
+        logger.error(f"Raw response: {error_snippet}")
+        
         return {
             "possible_conditions": ["Medical evaluation recommended"],
             "explanation": ["The system could not confidently match symptoms."],
             "home_care_tips": ["Rest", "Stay hydrated", "Monitor symptoms"],
             "when_to_see_doctor": ["If symptoms worsen or persist."],
+            "disclaimer": "This is not a medical diagnosis."
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Unexpected error in rag_answer: {e}")
+        return {
+            "possible_conditions": ["Medical evaluation recommended"],
+            "explanation": ["System error occurred."],
+            "home_care_tips": ["Rest", "Stay hydrated", "Monitor symptoms"],
+            "when_to_see_doctor": ["Seek immediate medical attention if severe."],
             "disclaimer": "This is not a medical diagnosis."
         }
