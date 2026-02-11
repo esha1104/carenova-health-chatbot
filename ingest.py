@@ -1,11 +1,13 @@
 import os
 import shutil
+import pickle
+import numpy as np
+import faiss
 from pathlib import Path
 from pydantic import SecretStr
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
 from logger import get_logger
 from config import (
     MEDICAL_KNOWLEDGE_PATH,
@@ -29,12 +31,14 @@ def load_markdown_files(data_path: str) -> list:
     for md_file in data_dir.rglob("*.md"):
         try:
             content = md_file.read_text(encoding="utf-8")
+            # Use relative path for source metadata
+            rel_path = md_file.relative_to(data_dir).as_posix()
             doc = Document(
                 page_content=content,
-                metadata={"source": md_file.name}
+                metadata={"source": rel_path}
             )
             documents.append(doc)
-            logger.debug(f"✓ Loaded: {md_file.name}")
+            logger.debug(f"✓ Loaded: {rel_path}")
         except Exception as e:
             logger.warning(f"⚠️  Failed to load {md_file.name}: {e}")
     
@@ -80,13 +84,22 @@ def ingest_documents():
         )
 
         logger.info("🗄️  Creating FAISS vector database...")
-        vectordb = FAISS.from_documents(
-            documents=chunks,
-            embedding=embeddings
-        )
+        # Get embeddings for all chunks
+        texts = [doc.page_content for doc in chunks]
+        embeddings_list = embeddings.embed_documents(texts)
+        embeddings_np = np.array(embeddings_list).astype('float32')
 
-        # ✅ Save FAISS index
-        vectordb.save_local(FAISS_INDEX_DIR)
+        # Create FAISS index
+        dimension = embeddings_np.shape[1]
+        index = faiss.IndexFlatL2(dimension)
+        index.add(embeddings_np)
+
+        # ✅ Save index and chunks
+        os.makedirs(FAISS_INDEX_DIR, exist_ok=True)
+        faiss.write_index(index, os.path.join(FAISS_INDEX_DIR, "index.faiss"))
+        with open(os.path.join(FAISS_INDEX_DIR, "chunks.pkl"), "wb") as f:
+            pickle.dump(chunks, f)
+            
         logger.info(f"✅ Vector database successfully saved to {FAISS_INDEX_DIR}")
 
     except Exception as e:

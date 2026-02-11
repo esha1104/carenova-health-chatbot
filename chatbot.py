@@ -7,6 +7,7 @@ from typing import Dict, List
 logger = get_logger(__name__)
 
 USE_ADAPTIVE_QUESTIONS = True
+DEFAULT_DISCLAIMER = "This is not a medical diagnosis. Consult a healthcare professional."
 
 
 def collect_symptoms():
@@ -105,7 +106,7 @@ def analyze(symptom_text: str) -> Dict:
         Dict with severity, confidence, conditions, care tips, warnings, and disclaimer
     """
     
-    logger.info(f"🧠 Analyzing symptoms: {symptom_text[:100]}...")
+    logger.info(f"🧠 Analyzing symptoms: length={len(symptom_text)}")
 
     try:
         severity = calculate_severity(symptom_text)
@@ -134,7 +135,7 @@ def analyze(symptom_text: str) -> Dict:
             "explanation": normalize_list(rag_data.get("explanation")),
             "home_care_tips": normalize_list(rag_data.get("home_care_tips")),
             "when_to_see_doctor": normalize_list(rag_data.get("when_to_see_doctor")),
-            "disclaimer": rag_data.get("disclaimer")
+            "disclaimer": rag_data.get("disclaimer") or DEFAULT_DISCLAIMER
         }
         
         logger.info(f"✅ Analysis complete: {result['severity']} ({result['confidence']})")

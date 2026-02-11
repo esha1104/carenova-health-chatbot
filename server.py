@@ -5,6 +5,8 @@ Handles symptom analysis, follow-up questions, and streaming LLM responses.
 
 import asyncio
 import json
+import os
+from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
@@ -16,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from models import (
     SymptomRequest,
@@ -47,23 +50,14 @@ limiter = Limiter(key_func=get_remote_address)
 
 # ============= SESSION STORAGE =============
 _sessions: Dict[str, Dict] = {}
+sessions_lock = asyncio.Lock()
+RECEIVE_TIMEOUT = 60.0 # 60 seconds timeout for websocket receive
 
 
-def get_or_create_session(session_id: str) -> Dict:
+async def get_or_create_session(session_id: str) -> Dict:
     """Get or create a user session."""
-    if session_id not in _sessions:
-        _sessions[session_id] = {
-            "created_at": datetime.now(),
-            "messages": [],
-            "initial_symptoms": None,
-            "followup_answers": [],
-            "analysis_result": None
-        }
-    else:
-        # Check timeout
-        age = datetime.now() - _sessions[session_id]["created_at"]
-        if age > timedelta(minutes=SESSION_TIMEOUT_MINUTES):
-            logger.info(f"⏰ Session {session_id} expired after {SESSION_TIMEOUT_MINUTES} min")
+    async with sessions_lock:
+        if session_id not in _sessions:
             _sessions[session_id] = {
                 "created_at": datetime.now(),
                 "messages": [],
@@ -71,8 +65,36 @@ def get_or_create_session(session_id: str) -> Dict:
                 "followup_answers": [],
                 "analysis_result": None
             }
-    
-    return _sessions[session_id]
+        else:
+            # Check timeout
+            age = datetime.now() - _sessions[session_id]["created_at"]
+            if age > timedelta(minutes=SESSION_TIMEOUT_MINUTES):
+                logger.info(f"⏰ Session {session_id} expired after {SESSION_TIMEOUT_MINUTES} min")
+                _sessions[session_id] = {
+                    "created_at": datetime.now(),
+                    "messages": [],
+                    "initial_symptoms": None,
+                    "followup_answers": [],
+                    "analysis_result": None
+                }
+        
+        return _sessions[session_id]
+
+
+async def cleanup_expired_sessions():
+    """Background task to cleanup expired sessions."""
+    while True:
+        await asyncio.sleep(60 * 5) # Run every 5 minutes
+        async with sessions_lock:
+            now = datetime.now()
+            expired_ids = [
+                sid for sid, data in _sessions.items()
+                if now - data["created_at"] > timedelta(minutes=SESSION_TIMEOUT_MINUTES)
+            ]
+            for sid in expired_ids:
+                del _sessions[sid]
+            if expired_ids:
+                logger.info(f"🧹 Cleaned up {len(expired_ids)} expired sessions")
 
 
 # ============= LIFESPAN (Startup/Shutdown) =============
@@ -82,6 +104,7 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Carenova API starting up...")
     
     # Startup
+    cleanup_task = asyncio.create_task(cleanup_expired_sessions())
     try:
         llm = get_llm()  # Test LLM connectivity
         logger.info("✅ LLM connection verified")
@@ -91,6 +114,7 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
+    cleanup_task.cancel()
     logger.info("🛑 Carenova API shutting down...")
 
 
@@ -101,6 +125,14 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request, exc):
+    """Handle rate limit exceedances."""
+    return JSONResponse(
+        status_code=429,
+        content={"error": f"Rate limit exceeded: {exc.detail}"}
+    )
 
 app.state.limiter = limiter
 
@@ -114,33 +146,32 @@ if ENABLE_CORS:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    logger.info(f"✅ CORS enabled for: {ALLOWED_ORIGINS}")
 
 
 # ============= ROUTES =============
-
 @app.get("/", tags=["Frontend"])
 async def serve_frontend():
     """Serve index.html for static frontend."""
-    try:
-        return FileResponse("static/index.html")
-    except FileNotFoundError:
+    if not Path("static/index.html").exists():
         return JSONResponse(
             status_code=404,
             content={"error": "Frontend not found. Run: mkdir -p static"}
         )
+    return FileResponse("static/index.html")
 
 
-@app.get("/health", tags=["System"])
-async def health_check() -> HealthResponse:
-    """Health check endpoint for load balancers and uptime monitoring."""
+@app.get("/health", response_model=HealthResponse, tags=["System"])
+async def health_check():
+    """Health check for load balancers and uptime monitoring."""
     try:
+        from config import FAISS_INDEX_DIR
         llm = get_llm()
+        vector_db_ready = Path(FAISS_INDEX_DIR).exists()
         return HealthResponse(
-            status="healthy",
-            message="All systems operational",
+            status="healthy" if vector_db_ready else "degraded",
+            message="All systems operational" if vector_db_ready else "Vector database missing",
             models_loaded=True,
-            vector_db_ready=True
+            vector_db_ready=vector_db_ready
         )
     except Exception as e:
         logger.warning(f"⚠️  Health check failed: {e}")
@@ -214,7 +245,7 @@ async def analyze_symptoms(request: AnalysisRequest):
     Combines initial symptoms + follow-up answers for more accurate guidance.
     """
     try:
-        logger.info(f"🔍 Analyzing {len(request.followup_answers)} response(s)...")
+        logger.info(f"💬 Analyzing {len(request.followup_answers)} response(s)...")
         
         # Combine all input
         combined_text = (
@@ -222,8 +253,9 @@ async def analyze_symptoms(request: AnalysisRequest):
             + " | ".join(request.followup_answers)
         )
         
-        # Run analysis
-        result = analyze(combined_text)
+        # Run analysis off the loop
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, analyze, combined_text)
         
         logger.info(f"✅ Analysis returned: {result.get('severity')}")
         return AnalysisResponse(**result)
@@ -259,9 +291,13 @@ async def websocket_chat(websocket: WebSocket):
     """
     await websocket.accept()
     logger.info(f"🔗 WebSocket connected: {websocket.client}")
-    
     try:
-        data = await websocket.receive_json()
+        try:
+            data = await asyncio.wait_for(websocket.receive_json(), timeout=RECEIVE_TIMEOUT)
+        except asyncio.TimeoutError:
+            logger.warning("🕒 WebSocket receive timeout")
+            await websocket.close()
+            return
         
         session_id = data.get("session_id", "default")
         initial_symptoms = data.get("initial_symptoms", "")
@@ -279,7 +315,7 @@ async def websocket_chat(websocket: WebSocket):
         logger.info(f"💬 Session {session_id}: Analyzing {len(followup_answers)} answers")
         
         # Get or create session
-        session = get_or_create_session(session_id)
+        session = await get_or_create_session(session_id)
         session["initial_symptoms"] = initial_symptoms
         session["followup_answers"] = followup_answers
         
@@ -292,11 +328,12 @@ async def websocket_chat(websocket: WebSocket):
         # Brief async pause for UI feedback
         await asyncio.sleep(0.3)
         
-        # Run analysis
+        # Run analysis off the loop
         combined_text = (
             initial_symptoms + " | " + " | ".join(followup_answers)
         )
-        result = analyze(combined_text)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, analyze, combined_text)
         
         # Store in session
         session["analysis_result"] = result
@@ -310,10 +347,13 @@ async def websocket_chat(websocket: WebSocket):
         logger.info(f"✅ WebSocket analysis complete for {session_id}")
     
     except json.JSONDecodeError:
-        await websocket.send_json({
-            "type": "error",
-            "message": "Invalid JSON received"
-        })
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": "Invalid JSON received"
+            })
+        except:
+            pass
     
     except Exception as e:
         logger.error(f"❌ WebSocket error: {e}")
@@ -326,7 +366,10 @@ async def websocket_chat(websocket: WebSocket):
             pass
     
     finally:
-        await websocket.close()
+        try:
+            await websocket.close()
+        except:
+            pass
 
 
 @app.get(

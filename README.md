@@ -1,33 +1,43 @@
+> **⚠️ MEDICAL DISCLAIMER:** This tool is NOT a substitute for professional medical advice, diagnosis, or treatment. It is for informational and educational purposes only. Always consult with a qualified healthcare provider for medical concerns.
+> **⚠️ REGULATORY COMPLIANCE:** This software is NOT currently certified as a Software as a Medical Device (SaMD). Deployment in production requires compliance with FDA/SaMD, HIPAA, state practice laws, and professional liability requirements. "Production Ready" claims are subject to these regulatory qualifications.
+
 # Carenova AI Health Assistant
 
-A production-ready medical guidance system with RAG (Retrieval Augmented Generation) using Ollama and LangChain. Includes both REST API and real-time WebSocket support for frontend integration.
+A production-ready medical guidance system with RAG (Retrieval Augmented Generation) using OpenRouter and FAISS. Includes both REST API and real-time WebSocket support for frontend integration.
 
 ## 🎯 Features
 
-✅ **RAG-Based Medical Knowledge** — Uses vector embeddings + semantic search  
-✅ **OpenRouter LLM** — No local downloads, cloud-based inference  
+✅ **RAG-Based Medical Knowledge** — Uses vector embeddings (FAISS) + semantic search  
+✅ **OpenRouter LLM** — Cloud-based inference via OpenRouter  
 ✅ **Adaptive Q&A** — LLM generates contextualized follow-up questions  
 ✅ **Streaming Chat** — WebSocket support for real-time responses  
 ✅ **REST APIs** — `/followup-questions`, `/analyze`, `/health` endpoints  
 ✅ **Production Ready** — Error handling, logging, session management, rate limiting  
-✅ **Frontend Included** — HTML/CSS/JS interface out of the box  
+✅ **Frontend Included** — HTML/CSS/JS interface served via FastAPI  
 ✅ **Configurable** — Environment variables for all settings  
-✅ **Docker Ready** — Single server VPS deployment
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Backend)
 
-### 1. **Get API Keys**
+Follow these steps to get the Carenova backend running on your local machine.
 
-**OpenRouter** (Free tier available):
-1. Go to [openrouter.ai](https://openrouter.ai)
-2. Sign up → Copy your API key
+### 1. **Clone and Setup**
 
-**OpenAI Embeddings** (Optional, for better embeddings):
-1. Go to [platform.openai.com](https://platform.openai.com)
-2. Create account → Copy API key
-   - OR skip this and use local Ollama for embeddings only
+```powershell
+# Clone the repository
+git clone https://github.com/yourusername/carenova-health-chatbot.git
+cd carenova-health-chatbot
+
+# Create a virtual environment
+python -m venv venv
+
+# Activate the virtual environment
+# Windows:
+.\venv\Scripts\activate
+# Unix/macOS:
+source venv/bin/activate
+```
 
 ### 2. **Install Dependencies**
 
@@ -37,44 +47,61 @@ pip install -r requirements.txt
 
 ### 3. **Configure Environment**
 
-Copy and edit `.env`:
-```bash
-copy .env.example .env
-```
-
-Edit `.env` with your API keys:
+Create a `.env` file in the root directory:
 ```env
-OPENROUTER_API_KEY=your_key_from_step_1
-OPENAI_API_KEY=your_openai_key_or_leave_blank
-EMBEDDINGS_PROVIDER=openai  # or "ollama" if using local
+# Server
+HOST=localhost
+PORT=8000
+DEBUG=True
+
+# LLM (OpenRouter)
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+LLM_MODEL=meta-llama/llama-3-8b-instruct:free
+
+# Embeddings
+OPENAI_API_KEY=your_key_here
+EMBEDDINGS_MODEL=text-embedding-3-small
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+# Paths
+MEDICAL_KNOWLEDGE_PATH=medical_knowledge
+FAISS_INDEX_DIR=faiss_index
+
+# RAG
+RAG_K_RESULTS=3
+RAG_SCORE_THRESHOLD=0.3
+RAG_CACHE_ENABLED=True
+
+# Session settings
+SESSION_TIMEOUT_MINUTES=30
+MAX_FOLLOWUP_QUESTIONS=3
+RATE_LIMIT_PER_MINUTE=20
+
+# CORS
+ENABLE_CORS=True
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8000
 ```
 
-### 4. **Ingest Medical Knowledge** (One-time)
+### 4. **Ingest Medical Knowledge**
 
-Builds vector database from markdown files in `medical_knowledge/`:
+This builds the FAISS vector database from markdown files in `medical_knowledge/`.
 
 ```bash
 python ingest.py
 ```
 
-### 5. **Start Backend Server**
+### 5. **Start the Backend Server**
 
 ```bash
+# Run the FastAPI server
 python server.py
 ```
 
 Expected output:
 ```
-🚀 Starting Carenova API on 0.0.0.0:8000
-✅ LLM initialized with OpenRouter: meta-llama/llama-2-7b-chat
-✅ Using OpenAI embeddings: text-embedding-3-small
-✅ Vector DB initialized: chroma_db
+🚀 Starting Carenova API on localhost:8000
 📖 Docs available at http://localhost:8000/docs
 ```
-
-### 6. **Access Frontend**
-
-Open browser → **http://localhost:8000**
 
 ---
 
@@ -83,11 +110,35 @@ Open browser → **http://localhost:8000**
 ### `GET /health`
 Health check for load balancers.
 
-```bash
-curl http://localhost:8000/health
+### `POST /followup-questions`
+Generate adaptive follow-up questions from initial symptoms.
 
-# Response:
-{
+### `POST /analyze`
+Full symptom analysis combining initial symptoms and follow-up answers.
+
+### `WebSocket /ws/chat`
+Real-time streaming chat for interactive sessions.
+
+---
+
+## 📁 Project Structure
+
+```
+carenova-health-chatbot/
+├── server.py              # FastAPI app (REST + WebSocket)
+├── chatbot.py             # Symptom analysis orchestration
+├── rag.py                 # FAISS retrieval logic (SimpleRetriever)
+├── llm.py                 # OpenRouter LLM initialization
+├── adaptive_questions.py  # Follow-up question generation
+├── ingest.py              # Data ingestion pipeline
+├── models.py              # Pydantic core models
+├── config.py              # Environment configuration
+├── logger.py              # Structured logging configuration
+├── requirements.txt       # Python dependencies
+├── .env                   # Environment secrets (ignored by git)
+├── faiss_index/           # Created by ingest.py (ignored by git)
+└── medical_knowledge/     # Source medical content
+```
   "status": "healthy",
   "message": "All systems operational",
   "models_loaded": true,
@@ -324,6 +375,12 @@ python chatbot.py
 
 ## 📊 Logging & Monitoring
 
+**⚠️ SECURITY NOTICE:** Logs saved to `logs/carenova.log` may contain Protected Health Information (PHI) which is protected under HIPAA.
+- **Access Control:** Log storage must have strict access controls and encryption.
+- **Redaction:** It is highly recommended to redact or exclude sensitive health fields (PII/PHI) before logging.
+- **Retention:** Implement a clear log retention and deletion policy.
+- **Exposure:** NEVER expose log files via web servers or public endpoints.
+
 Logs are saved to `logs/carenova.log` in JSON format:
 
 ```bash
@@ -355,6 +412,8 @@ Server runs at `http://localhost:8000`
 
 ### **Docker**
 Create `Dockerfile`:
+# Run ingestion to populate vector DB before starting server
+RUN python ingest.py
 ```dockerfile
 FROM python:3.11-slim
 WORKDIR /app
@@ -375,8 +434,12 @@ Create `docker-compose.yml`:
 ```yaml
 version: '3.8'
 services:
-  api:
-    build: .
+  ap# Run ingestion during container startup if needed
+    command: >
+      sh -c "python ingest.py && python server.py"
+    volumes:
+      - ./faiss_index:/app/faiss_index
+      - ./medical_knowledge:/app/medical_knowledge
     ports:
       - "8000:8000"
     environment:
@@ -389,6 +452,8 @@ services:
 
 Run:
 ```bash
+# Update User to the appropriate system user (e.g., apache, nginx, or dedicated deploy user)
+# Verify user exists with: grep "www-data" /etc/passwd
 docker-compose up
 ```
 
@@ -458,7 +523,15 @@ python ingest.py
 - Use smaller model: `EMBEDDINGS_MODEL=text-embedding-3-small`
 - Or switch to Ollama
 
-**Issue: WebSocket won't connect**
+**Issue: WebSocket won't connect**.
+
+**DISCLAIMER OF WARRANTY & LIMITATION OF LIABILITY:**
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE.
+
+**MEDICAL ADVISORY:**
+This software is NOT intended for medical diagnosis or clinical care. By using this software, users acknowledge that they understand it is an informational tool only and not a substitute for professional medical advice.
+
+*It is highly recommended to consult with legal counsel regarding appropriate licensing and risk management for medical-related software.*
 - Check CORS is enabled: `ENABLE_CORS=True`
 - Verify frontend URL is in `ALLOWED_ORIGINS`
 
