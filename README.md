@@ -99,7 +99,7 @@ python server.py
 
 Expected output:
 ```
-🚀 Starting Carenova API on localhost:8000
+🚀 Starting Carenova API on 127.0.0.1:8000
 📖 Docs available at http://localhost:8000/docs
 ```
 

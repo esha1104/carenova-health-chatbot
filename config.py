@@ -34,7 +34,7 @@ def safe_env_float(name, default):
         return default
 
 # ============= SERVER CONFIG =============
-HOST = os.getenv("HOST", "0.0.0.0")
+HOST = os.getenv("HOST", "127.0.0.1")
 PORT = safe_env_int("PORT", 8000)
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
