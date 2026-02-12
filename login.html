@@ -1,0 +1,88 @@
+<<<<<<< HEAD
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login - CareNova</title>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+</head>
+<body>
+
+<h2>Login to CareNova</h2>
+
+<input type="email" id="email" placeholder="Enter your email" required>
+<button onclick="sendEmailLink()">Send Login Link</button>
+
+<p id="message"></p>
+
+<!-- Chatbot Section (Hidden Initially) -->
+<div id="chatbot-section" style="display:none; margin-top:20px;">
+    <h2>CareNova Chatbot</h2>
+    <iframe src="http://localhost:8501"
+        style="width:100%; height:600px; border:none;">
+    </iframe>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBVNU3qsMJs6diyrmG9kax6Dz391JSKQDg",
+  authDomain: "otpp-9bb28.firebaseapp.com",
+  projectId: "otpp-9bb28",
+  storageBucket: "otpp-9bb28.appspot.com",
+  messagingSenderId: "714490495421",
+  appId: "1:714490495421:web:60b8b690d08a51812712d4"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
+// Send email login link
+function sendEmailLink() {
+    const email = document.getElementById("email").value;
+
+    const actionCodeSettings = {
+        url: window.location.href,
+        handleCodeInApp: true
+    };
+
+    auth.sendSignInLinkToEmail(email, actionCodeSettings)
+        .then(function () {
+            window.localStorage.setItem('emailForSignIn', email);
+            document.getElementById("message").innerText =
+                "Login link sent! Check your email.";
+        })
+        .catch(function (error) {
+            alert(error.message);
+        });
+}
+
+// Automatically sign in when user clicks email link
+if (auth.isSignInWithEmailLink(window.location.href)) {
+
+    let email = window.localStorage.getItem('emailForSignIn');
+
+    if (!email) {
+        email = prompt("Please confirm your email");
+    }
+
+    auth.signInWithEmailLink(email, window.location.href)
+        .then(function () {
+            window.localStorage.removeItem('emailForSignIn');
+
+            document.getElementById("email").style.display = "none";
+            document.querySelector("button").style.display = "none";
+            document.getElementById("message").innerText = "Login Successful!";
+
+            document.getElementById("chatbot-section").style.display = "block";
+        })
+        .catch(function (error) {
+            alert(error.message);
+        });
+}
+</script>
+
+</body>
+</html>
+</html>

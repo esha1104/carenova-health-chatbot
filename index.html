@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CareNova - Empathetic Disease Prediction</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet" />
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    body {
+      animation: fadeIn 1s ease-in;
+    }
+
+    .about img:hover {
+      transform: scale(1.05);
+      transition: transform 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    .features .feature:hover,
+    .contact-form button:hover,
+    .login-container button:hover,
+    header nav ul li a:hover {
+      transition: 0.3s ease;
+      color: #0e7c7b;
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header data-aos="fade-down">
+    <div class="logo">CareNova</div>
+    <nav>
+      <ul>
+        <li><a href="#home">Home</a></li>
+        <li><a href="features.html">Features</a></li>
+        <li><a href="#about">About</a></li>
+        <li><a href="#contact">Contact</a></li>
+        <li><a href="login.html" class="login-btn">Login</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <!-- Hero -->
+  <section id="home" class="hero" data-aos="fade-up">
+    <div class="hero-content">
+      <div class="hero-image">
+        <img src="https://nicholasidoko.com/blog/wp-content/uploads/2023/04/image-9.png" alt="Chatbot Image" />
+      </div>
+      <div class="hero-text">
+        <h1>Empathetic AI-Powered Health Assistant</h1>
+        <p>Our AI-powered chatbot predicts diseases with care and empathy.</p>
+        <a href="#login" class="get-started">Get Started</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="features">
+    <div class="feature" data-aos="fade-right">
+      <img src="https://cdn-images-1.medium.com/max/1200/1*lcyru1tcINa5WUDeOLWbgw.jpeg" alt="Enhanced Health Awareness" />
+      <h3>Enhanced Health Awareness</h3>
+      <p>Stay informed about your health with real-time insights and personalized reports.</p>
+    </div>
+    <div class="feature" data-aos="fade-left">
+      <img src="https://th.bing.com/th/id/OIP.N2qgNVebg1M8_Lih4sJ8UAAAAA?rs=1&pid=ImgDetMain" alt="Streamlined Diagnosis Prediction" />
+      <h3>Streamlined Diagnosis Prediction</h3>
+      <p>Get accurate AI-driven disease predictions to understand your health better.</p>
+    </div>
+    <div class="feature" data-aos="fade-right">
+      <img src="https://static.fmgsuite.com/media/ContentFMG/variantSize/4c827456-de56-4021-93cf-aa7bb6dfc627.png?v=1" alt="Empowered Healthcare Decisions" />
+      <h3>Empowered Healthcare Decisions</h3>
+      <p>Make informed choices about your health with expert recommendations.</p>
+    </div>
+    <div class="feature" data-aos="fade-left">
+      <img src="https://cdn.prod.website-files.com/6331f18a8af6845b0f127c61/6579b01a8a290d78c8b369a6_download_app%20Asset%20(8)-p-2000.png" alt="Accessible Healthcare Information" />
+      <h3>Accessible Healthcare Information</h3>
+      <p>Access critical healthcare information anytime, anywhere for better wellness.</p>
+    </div>
+  </section>
+
+  <!-- About -->
+  <section id="about" style="padding: 60px 20px; background-color: #f9f9fc;" data-aos="fade-up">
+    <div style="max-width: 1100px; margin: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 40px;">
+      <div style="flex: 1 1 400px; text-align: center;">
+        <h2 style="font-size: 2.2rem; font-weight: bold; margin-bottom: 20px; color: #003d66;">About Us</h2>
+        <p style="font-size: 1.1rem; line-height: 1.6; color: #333;">
+          CareNova is your empathetic AI health assistant, designed to help users understand their symptoms and take action with confidence and care. We combine smart technology with human-centered design to make healthcare more accessible.
+        </p>
+      </div>
+      <div style="flex: 1 1 300px; display: flex; justify-content: center;">
+        <img src="images/logo-new.jpg" alt="CareNova Logo" style="max-width: 100%; height: auto; border-radius: 16px; box-shadow: 0 8px 20px rgba(0,0,0,0.1);" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact -->
+  <section id="contact" class="contact" data-aos="fade-up">
+    <div class="contact-image">
+      <img src="https://expatnetwork.com/wp-content/uploads/2021/09/bigstock-Holding-Hands-Doctor-Asian-Sen-234458698-scaled-e1632999088105.jpg" alt="Medical Assistance" />
+    </div>
+    <div class="contact-form">
+      <h2>Contact Us</h2>
+      <p>Get in touch with us for any queries or assistance.</p>
+      <form onsubmit="handleContact(event)">
+        <input type="text" placeholder="Your Name" required />
+        <input type="email" placeholder="Your Email" required />
+        <textarea placeholder="Your Message" rows="5" required></textarea>
+        <button type="submit">Send Message</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Login -->
+   <section id="login" class="login-container" data-aos="fade-up">
+  <h2>Login to CareNova</h2>
+
+  <input type="email" id="email" placeholder="Enter Email Address" required />
+  <button onclick="sendEmailLink()">Send Login Link</button>
+
+  <p id="message"></p>
+</section>
+
+  <!-- Chatbot Section -->
+  <section id="chatbot-section" style="display: none; padding: 2rem;">
+    <h2>CareNova Chatbot</h2>
+    <iframe src="http://localhost:8501" style="width: 100%; height: 600px; border: none; border-radius: 10px;" allow="clipboard-write" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+  </section>
+
+  <!-- AOS + Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+  <script>
+    AOS.init({ duration: 1000 });
+
+  
+
+    function handleContact(event) {
+      event.preventDefault();
+      alert("Your message has been sent successfully!");
+      event.target.reset();
+    }
+  </script>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBVNU3qsMJs6diyrmG9kax6Dz391JSKQDg",
+  authDomain: "otpp-9bb28.firebaseapp.com",
+  projectId: "otpp-9bb28",
+  storageBucket: "otpp-9bb28.appspot.com",
+  messagingSenderId: "714490495421",
+  appId: "1:714490495421:web:60b8b690d08a51812712d4"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
+function sendEmailLink() {
+  const email = document.getElementById("email").value;
+
+  const actionCodeSettings = {
+    url: window.location.href,
+    handleCodeInApp: true
+  };
+
+  auth.sendSignInLinkToEmail(email, actionCodeSettings)
+    .then(function () {
+      window.localStorage.setItem("emailForSignIn", email);
+      document.getElementById("message").innerText =
+        "Login link sent! Check your email.";
+    })
+    .catch(function (error) {
+      alert(error.message);
+    });
+}
+
+// Auto login after clicking email link
+if (auth.isSignInWithEmailLink(window.location.href)) {
+
+  let email = window.localStorage.getItem("emailForSignIn");
+
+  if (!email) {
+    email = prompt("Please confirm your email");
+  }
+
+  auth.signInWithEmailLink(email, window.location.href)
+    .then(function () {
+      window.localStorage.removeItem("emailForSignIn");
+
+      document.getElementById("login").style.display = "none";
+      document.getElementById("chatbot-section").style.display = "block";
+    })
+    .catch(function (error) {
+      alert(error.message);
+    });
+}
+</script>
+</body>
+</html>

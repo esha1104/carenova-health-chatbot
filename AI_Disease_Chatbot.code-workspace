@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "../AI_Disease_Chatbot"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "CareNova"
+	}
+}

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CareNova Features</title>
+  <style>
+    /* Page Transition Styles */
+    body {
+      opacity: 0;
+      transition: opacity 0.6s ease-in-out;
+    }
+  
+    body.fade-in {
+      opacity: 1;
+    }
+  </style>
+  <style>
+    /* Animated Blue-White Gradient Background */
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(-45deg, #d0f0fd, #f0faff, #a8d8f8, #e6f7ff);
+      background-size: 400% 400%;
+      animation: gradientBG 15s ease infinite;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px;
+      color: #003d66;
+    }
+
+    @keyframes gradientBG {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    h1 {
+      font-size: 3rem;
+      margin-bottom: 30px;
+      text-align: center;
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .feature-box {
+      background: rgba(255, 255, 255, 0.7);
+      border-radius: 20px;
+      padding: 30px;
+      max-width: 900px;
+      width: 90%;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+      margin-bottom: 40px;
+      animation: fadeInUp 1s ease forwards;
+      opacity: 0;
+    }
+
+    .feature-box:nth-child(even) {
+      animation-delay: 0.3s;
+    }
+
+    .feature-box:nth-child(odd) {
+      animation-delay: 0.6s;
+    }
+
+    @keyframes fadeInUp {
+      0% {
+        transform: translateY(40px);
+        opacity: 0;
+      }
+      100% {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    h2 {
+      margin-bottom: 15px;
+      font-size: 1.8rem;
+      color: #003d66;
+    }
+
+    p {
+      font-size: 1.1rem;
+      line-height: 1.6;
+      color: #003d66;
+    }
+
+    ul {
+      margin-top: 20px;
+      list-style: none;
+      padding: 0;
+      font-size: 1.1rem;
+      color: #003d66;
+    }
+
+    ul li::before {
+      content: "🔹 ";
+    }
+
+    .back-btn {
+      background-color: rgba(0, 61, 102, 0.1);
+      border: none;
+      padding: 12px 24px;
+      border-radius: 10px;
+      color: #003d66;
+      font-size: 1rem;
+      text-decoration: none;
+      margin-bottom: 20px;
+      transition: background 0.3s ease;
+    }
+
+    .back-btn:hover {
+      background-color: rgba(0, 61, 102, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <a href="index.html" class="back-btn">← Back to Home</a>
+
+  <h1>CareNova Features</h1>
+
+  <div class="feature-box">
+    <h2>Enhanced Health Awareness</h2>
+    <p>
+      These days, people have easy access to everything through social media. Digital health applications, mobile apps, and ad campaigns allow users to explore reliable resources. Enhanced health awareness includes understanding health challenges, adopting healthy habits, and staying informed—leading to a better, more competent lifestyle.
+    </p>
+  </div>
+
+  <div class="feature-box">
+    <h2>Streamlined Diagnosis Prediction</h2>
+    <p>
+      Using AI and ML, this system analyzes massive patient data sets—like symptoms and medical history—to accurately predict potential diagnoses. It accelerates diagnosis, reduces human error, and empowers doctors with decision-support tools for more personalized and timely care.
+    </p>
+  </div>
+
+  <div class="feature-box">
+    <h2>Empowered Health Decisions</h2>
+    <p>
+      Empowered decision-making means individuals use digital tools, health data, and resources to actively guide their care. This leads to better understanding of treatment options, closer doctor-patient collaboration, and improved health autonomy and outcomes.
+    </p>
+  </div>
+
+  <div class="feature-box">
+    <h2>Accessible Health Information</h2>
+    <p>
+      Accessibility ensures that everyone—regardless of background—can obtain clear and accurate medical information. With online health records, guidelines, and multi-language content, this feature promotes informed decisions and a more equitable healthcare experience.
+    </p>
+  </div>
+
+  <div class="feature-box">
+    <h2>Included Functional Features</h2>
+    <ul>
+      <li>Multiple symptom input</li>
+      <li>Diagnosis predictions</li>
+      <li>Information on potential diseases</li>
+      <li>Direct messaging</li>
+      <li>Disease awareness</li>
+      <li>Interactive symptom checker</li>
+    </ul>
+  </div>
+  <script>
+    // Page fade-in on load
+    document.addEventListener("DOMContentLoaded", () => {
+      document.body.classList.add("fade-in");
+    });
+  
+    // Smooth fade-out on link click
+    document.querySelectorAll("a[href]").forEach(link => {
+      const url = link.getAttribute("href");
+  
+      // Only apply to internal links
+      if (url && !url.startsWith("http") && !url.startsWith("mailto")) {
+        link.addEventListener("click", function (e) {
+          e.preventDefault();
+          document.body.classList.remove("fade-in");
+          document.body.style.opacity = 0;
+  
+          setTimeout(() => {
+            window.location.href = url;
+          }, 400); // Match the transition time
+        });
+      }
+    });
+  </script>
+</body>
+</html>
+
+
