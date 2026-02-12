@@ -1,8 +1,13 @@
 from rag import rag_answer
 from adaptive_questions import generate_followup_questions
+from logger import get_logger
 import json
+from typing import Dict, List
+
+logger = get_logger(__name__)
 
 USE_ADAPTIVE_QUESTIONS = True
+DEFAULT_DISCLAIMER = "This is not a medical diagnosis. Consult a healthcare professional."
 
 
 def collect_symptoms():
@@ -90,38 +95,63 @@ def normalize_list(value):
     return []
 
 
-def analyze(symptom_text):
+def analyze(symptom_text: str) -> Dict:
+    """
+    Analyze symptoms and return structured medical guidance.
+    
+    Args:
+        symptom_text: Combined symptom description and follow-up answers
+        
+    Returns:
+        Dict with severity, confidence, conditions, care tips, warnings, and disclaimer
+    """
+    
+    logger.info(f"🧠 Analyzing symptoms: length={len(symptom_text)}")
 
-    print("\n🧠 Analyzing your symptoms...\n")
+    try:
+        severity = calculate_severity(symptom_text)
+        confidence = calculate_confidence(symptom_text, severity)
 
-    severity = calculate_severity(symptom_text)
-    confidence = calculate_confidence(symptom_text, severity)
+        rag_data = rag_answer(symptom_text)
 
-    rag_data = rag_answer(symptom_text)
+        # Safe fallback
+        if (
+            not rag_data
+            or "possible_conditions" not in rag_data
+            or not rag_data["possible_conditions"]
+        ):
+            rag_data = {
+                "possible_conditions": ["Medical evaluation recommended"],
+                "explanation": ["Symptoms were not strongly matched."],
+                "home_care_tips": ["Rest", "Stay hydrated", "Monitor symptoms"],
+                "when_to_see_doctor": ["If symptoms persist or worsen"],
+                "disclaimer": "This is not a medical diagnosis."
+            }
 
-    # Safe fallback
-    if (
-        not rag_data
-        or "possible_conditions" not in rag_data
-        or not rag_data["possible_conditions"]
-    ):
-        rag_data = {
-            "possible_conditions": ["Medical evaluation recommended"],
-            "explanation": ["Symptoms were not strongly matched."],
-            "home_care_tips": ["Rest", "Stay hydrated", "Monitor symptoms"],
-            "when_to_see_doctor": ["If symptoms persist or worsen"],
-            "disclaimer": "This is not a medical diagnosis."
+        result = {
+            "severity": severity,
+            "confidence": f"{confidence}%",
+            "possible_conditions": normalize_list(rag_data.get("possible_conditions")),
+            "explanation": normalize_list(rag_data.get("explanation")),
+            "home_care_tips": normalize_list(rag_data.get("home_care_tips")),
+            "when_to_see_doctor": normalize_list(rag_data.get("when_to_see_doctor")),
+            "disclaimer": rag_data.get("disclaimer") or DEFAULT_DISCLAIMER
         }
-
-    return {
-        "severity": severity,
-        "confidence": f"{confidence}%",
-        "possible_conditions": normalize_list(rag_data.get("possible_conditions")),
-        "explanation": normalize_list(rag_data.get("explanation")),
-        "home_care_tips": normalize_list(rag_data.get("home_care_tips")),
-        "when_to_see_doctor": normalize_list(rag_data.get("when_to_see_doctor")),
-        "disclaimer": rag_data.get("disclaimer")
-    }
+        
+        logger.info(f"✅ Analysis complete: {result['severity']} ({result['confidence']})")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Analyze failed: {e}")
+        return {
+            "severity": "Unknown",
+            "confidence": "0%",
+            "possible_conditions": ["Medical evaluation recommended"],
+            "explanation": ["System error occurred during analysis."],
+            "home_care_tips": ["Seek professional medical advice."],
+            "when_to_see_doctor": ["Immediately if symptoms are severe."],
+            "disclaimer": "This is not a medical diagnosis. Consult a healthcare professional."
+        }
 
 
 if __name__ == "__main__":
