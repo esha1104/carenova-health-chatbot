@@ -95,3 +95,25 @@ class HealthResponse(BaseModel):
     message: str = Field(..., description="Status message")
     models_loaded: bool = Field(..., description="LLM and embeddings models available")
     vector_db_ready: bool = Field(..., description="Chroma vector database accessible")
+
+
+class ContactForm(BaseModel):
+    """Input: Contact form submission from frontend"""
+    name: str = Field(..., min_length=2, max_length=100, description="Sender's name")
+    email: str = Field(..., description="Sender's email address")
+    message: str = Field(..., min_length=10, max_length=2000, description="Contact message")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "John Doe",
+                "email": "john@example.com",
+                "message": "I have a question about the chatbot features."
+            }
+        }
+
+
+class ContactResponse(BaseModel):
+    """Output: Contact form submission response"""
+    status: str = Field(..., description="success | error")
+    message: str = Field(..., description="Response message")

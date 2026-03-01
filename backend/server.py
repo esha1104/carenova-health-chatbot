@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, HTTPException, Depends, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +26,9 @@ from models import (
     FollowupQuestionsResponse,
     AnalysisRequest,
     AnalysisResponse,
-    HealthResponse
+    HealthResponse,
+    ContactForm,
+    ContactResponse
 )
 from chatbot import analyze
 from adaptive_questions import generate_followup_questions
@@ -149,15 +151,50 @@ if ENABLE_CORS:
 
 
 # ============= ROUTES =============
+# Mount static files from frontend directory
+frontend_dir = Path(__file__).parent.parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
+else:
+    logger.warning(f"⚠️  Frontend directory not found at {frontend_dir}")
+
 @app.get("/", tags=["Frontend"])
 async def serve_frontend():
     """Serve index.html for static frontend."""
-    if not Path("static/index.html").exists():
+    frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
+    if not frontend_path.exists():
         return JSONResponse(
             status_code=404,
-            content={"error": "Frontend not found. Run: mkdir -p static"}
+            content={"error": f"Frontend not found at {frontend_path}"}
         )
-    return FileResponse("static/index.html")
+    return FileResponse(str(frontend_path))
+
+
+@app.get("/{file_path:path}", tags=["Frontend"])
+async def serve_static_files(file_path: str):
+    """Serve static files (HTML, CSS, JS) from frontend directory."""
+    frontend_base = Path(__file__).parent.parent / "frontend"
+    file_full_path = frontend_base / file_path
+    
+    # Security: prevent directory traversal
+    try:
+        file_full_path = file_full_path.resolve()
+        if not str(file_full_path).startswith(str(frontend_base.resolve())):
+            return JSONResponse(status_code=403, content={"error": "Access denied"})
+    except:
+        return JSONResponse(status_code=403, content={"error": "Invalid path"})
+    
+    # Serve the file if it exists
+    if file_full_path.exists() and file_full_path.is_file():
+        return FileResponse(str(file_full_path))
+    
+    # If not found, try serving index.html for SPA routing
+    if str(file_path).endswith(".html") or not "." in file_path.split("/")[-1]:
+        index_path = frontend_base / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+    
+    return JSONResponse(status_code=404, content={"error": f"File not found: {file_path}"})
 
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
@@ -195,16 +232,16 @@ async def health_check():
     }
 )
 @limiter.limit(f"{RATE_LIMIT_PER_MINUTE}/minute")
-async def get_followup_questions(request: FollowupQuestionsRequest):
+async def get_followup_questions(request: Request, symptom_request: FollowupQuestionsRequest):
     """
     Generate intelligent follow-up questions based on initial symptoms.
     
     These questions help differentiate between conditions.
     """
     try:
-        logger.info(f"📝 Generating follow-ups for: {request.symptoms[:50]}...")
+        logger.info(f"📝 Generating follow-ups for: {symptom_request.symptoms[:50]}...")
         
-        questions = generate_followup_questions(request.symptoms)
+        questions = generate_followup_questions(symptom_request.symptoms)
         
         # Validate response
         if not isinstance(questions, list) or len(questions) == 0:
@@ -238,19 +275,19 @@ async def get_followup_questions(request: FollowupQuestionsRequest):
     }
 )
 @limiter.limit(f"{RATE_LIMIT_PER_MINUTE}/minute")
-async def analyze_symptoms(request: AnalysisRequest):
+async def analyze_symptoms(request: Request, analysis_request: AnalysisRequest):
     """
     Comprehensive symptom analysis using RAG.
     
     Combines initial symptoms + follow-up answers for more accurate guidance.
     """
     try:
-        logger.info(f"💬 Analyzing {len(request.followup_answers)} response(s)...")
+        logger.info(f"💬 Analyzing {len(analysis_request.followup_answers)} response(s)...")
         
         # Combine all input
         combined_text = (
-            request.initial_symptoms + " | "
-            + " | ".join(request.followup_answers)
+            analysis_request.initial_symptoms + " | "
+            + " | ".join(analysis_request.followup_answers)
         )
         
         # Run analysis off the loop
@@ -265,6 +302,40 @@ async def analyze_symptoms(request: AnalysisRequest):
         raise HTTPException(
             status_code=500,
             detail="Failed to analyze symptoms"
+        )
+
+
+@app.post(
+    "/contact",
+    response_model=ContactResponse,
+    tags=["Contact"],
+    summary="Submit contact form",
+    responses={
+        200: {"description": "Contact form submitted"},
+        400: {"description": "Invalid input"},
+        500: {"description": "Submission failed"}
+    }
+)
+async def submit_contact(contact: ContactForm):
+    """
+    Handle contact form submissions from the frontend.
+    
+    Logs contact information for support team follow-up.
+    """
+    try:
+        logger.info(f"📧 Contact form submission from {contact.name} <{contact.email}>")
+        logger.info(f"   Message: {contact.message[:100]}...")
+        
+        return ContactResponse(
+            status="success",
+            message="Thank you for contacting us! We'll get back to you soon."
+        )
+    
+    except Exception as e:
+        logger.error(f"❌ Contact form submission failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to submit contact form"
         )
 
 
