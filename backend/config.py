@@ -41,7 +41,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # ============= LLM CONFIG (OpenRouter) =============
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-LLM_MODEL = os.getenv("LLM_MODEL", "meta-llama/llama-3-8b-instruct:free")
+LLM_MODEL = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
 LLM_TEMPERATURE = safe_env_float("LLM_TEMPERATURE", 0.1)
 LLM_MAX_TOKENS = safe_env_int("LLM_MAX_TOKENS", 512)
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
