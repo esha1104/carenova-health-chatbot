@@ -387,12 +387,15 @@
 
         // Send email login link
         function sendEmailLink() {
-            const email = document.getElementById('email').value.trim();
+            const emailInput = document.getElementById('email');
+            const email = emailInput.value.trim();
             const sendBtn = document.getElementById('sendBtn');
 
-            // Validate email
-            if (!email || email.length < 5) {
-                showMessage('Please enter a valid email address', 'error');
+            // Validate email using regex pattern
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!email || !emailRegex.test(email)) {
+                showMessage('Please enter a valid email address (e.g., user@example.com)', 'error');
+                emailInput.focus();
                 return;
             }
 
@@ -423,26 +426,81 @@
                 });
         }
 
+        // Function to complete sign-in process
+        function completeSignIn(emailAddress) {
+            if (!emailAddress) return;
+            
+            auth.signInWithEmailLink(emailAddress, window.location.href)
+                .then(() => {
+                    localStorage.removeItem('emailForSignIn');
+                    showMessage('✓ Login successful! Redirecting...', 'success');
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 2000);
+                })
+                .catch((error) => {
+                    showMessage(`Sign in error: ${error.message}`, 'error');
+                });
+        }
+
+        // Function to show email confirmation UI
+        function showEmailConfirmation() {
+            const emailSection = document.getElementById('email-section');
+            
+            // Create confirmation UI
+            const confirmHTML = `
+                <div style="background-color: #d1ecf1; border: 1px solid #bee5eb; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <p style="margin: 0 0 10px 0; color: #0c5460; font-size: 14px;">
+                        <strong>Email confirmation needed:</strong> We don't have your email on file. Please enter the email address you used to receive the login link.
+                    </p>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <input 
+                            type="email" 
+                            id="confirmEmail" 
+                            placeholder="Enter your email address" 
+                            style="width: 100%; padding: 12px 15px; border: 1px solid #bee5eb; border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 10px;"
+                            required
+                        />
+                        <button 
+                            onclick="handleEmailConfirmation()" 
+                            style="width: 100%; padding: 12px; background-color: #1E2749; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s ease;"
+                        >
+                            Confirm & Complete Sign In
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            emailSection.innerHTML = confirmHTML + emailSection.innerHTML;
+        }
+
+        // Handle email confirmation
+        function handleEmailConfirmation() {
+            const confirmEmail = document.getElementById('confirmEmail');
+            if (!confirmEmail) return;
+            
+            const email = confirmEmail.value.trim();
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            
+            if (!email || !emailRegex.test(email)) {
+                showMessage('Please enter a valid email address', 'error');
+                confirmEmail.focus();
+                return;
+            }
+            
+            completeSignIn(email);
+        }
+
         // Check if user clicked email link
         if (auth.isSignInWithEmailLink(window.location.href)) {
             let email = localStorage.getItem('emailForSignIn');
 
-            if (!email) {
-                email = prompt('Please confirm your email for sign-in:');
-            }
-
             if (email) {
-                auth.signInWithEmailLink(email, window.location.href)
-                    .then(() => {
-                        localStorage.removeItem('emailForSignIn');
-                        showMessage('✓ Login successful! Redirecting...', 'success');
-                        setTimeout(() => {
-                            window.location.href = 'index.html';
-                        }, 2000);
-                    })
-                    .catch((error) => {
-                        showMessage(`Sign in error: ${error.message}`, 'error');
-                    });
+                // Email is available, proceed with sign-in
+                completeSignIn(email);
+            } else {
+                // Email not found, show confirmation UI instead of prompt
+                showEmailConfirmation();
             }
         }
 
@@ -452,6 +510,18 @@
                 sendEmailLink();
             }
         });
+
+        // Allow Enter key for email confirmation (after DOM is ready)
+        setTimeout(() => {
+            const confirmEmail = document.getElementById('confirmEmail');
+            if (confirmEmail) {
+                confirmEmail.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        handleEmailConfirmation();
+                    }
+                });
+            }
+        }, 100);
     </script>
 </body>
 </html>

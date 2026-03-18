@@ -568,7 +568,8 @@
     // Logout function
     function logoutUser() {
       auth.signOut().then(() => {
-        window.location.href = 'index.html';
+        // Let onAuthStateChanged listener handle UI update and navigation
+        console.log('User signed out successfully');
       }).catch(error => {
         alert('Error logging out: ' + error.message);
       });

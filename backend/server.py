@@ -20,6 +20,13 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+try:
+    import firebase_admin
+    from firebase_admin import auth as firebase_auth
+except ImportError:
+    firebase_admin = None
+    firebase_auth = None
+
 from models import (
     SymptomRequest,
     FollowupQuestionsRequest,
@@ -346,19 +353,31 @@ async def submit_contact(contact: ContactForm):
     responses={
         200: {"description": "Token is valid"},
         401: {"description": "Invalid or expired token"},
+        429: {"description": "Rate limit exceeded"},
         500: {"description": "Verification failed"}
     }
 )
+@limiter.limit(f"{RATE_LIMIT_PER_MINUTE}/minute")
 async def verify_auth(request: Request):
     """
     Verify Firebase authentication token from request header.
     
     Expects: Authorization: Bearer <firebase_token>
+    Real Firebase token verification using firebase-admin SDK.
     """
     try:
+        # Check if firebase-admin is available
+        if not firebase_admin or not firebase_auth:
+            logger.warning("⚠️  Firebase Admin SDK not initialized")
+            raise HTTPException(
+                status_code=500,
+                detail="Auth service temporarily unavailable"
+            )
+        
         # Get authorization header
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
+            logger.warning("⚠️  Missing or invalid authorization header")
             raise HTTPException(
                 status_code=401,
                 detail="Missing or invalid authorization header"
@@ -366,21 +385,33 @@ async def verify_auth(request: Request):
         
         token = auth_header.split(" ")[1]
         
-        # Verify token with Firebase (basic validation)
-        # In production, you'd use firebase-admin SDK
-        logger.info(f"✅ Auth token verified")
-        return {
-            "status": "valid",
-            "message": "Authentication token is valid"
-        }
+        # Verify token with Firebase Admin SDK
+        try:
+            decoded_token = firebase_auth.verify_id_token(token)
+            user_id = decoded_token.get('uid')
+            logger.info(f"✅ Auth token verified for user: {user_id}")
+            return {
+                "status": "valid",
+                "message": "Authentication token is valid",
+                "uid": user_id
+            }
+        except firebase_admin.exceptions.FirebaseError:
+            logger.warning("⚠️  Firebase token verification failed")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid or expired authentication token"
+            )
     
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Auth verification failed: {e}")
+        # Sanitized error logging - do not include exception details
+        logger.error(f"❌ Auth verification failed: {e.__class__.__name__}")
+        if DEBUG:
+            logger.debug(f"Auth error details: {str(e)}")
         raise HTTPException(
             status_code=401,
-            detail="Invalid authentication token"
+            detail="Authentication verification failed"
         )
 
 
