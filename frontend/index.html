@@ -192,6 +192,7 @@
     let currentSymptoms = '';
     let currentQuestions = [];
     let currentAnswers = [];
+    let currentQuestionIndex = 0; // Track which question we're on
 
     // Initialize API
     initAPI();
@@ -226,9 +227,11 @@
       try {
         const response = await getFollowupQuestions(symptoms);
         currentQuestions = response.questions;
+        currentQuestionIndex = 0; // Reset to first question
+        currentAnswers = new Array(response.questions.length).fill(''); // Initialize answers array
 
-        // Render questions
-        renderQuestions(response.questions);
+        // Render first question only
+        renderSingleQuestion(0);
 
         // Switch to questions step
         switchStep('questions');
@@ -241,57 +244,121 @@
     }
 
     /**
-     * Render follow-up questions as radio/checkbox inputs
+     * Render a single question with Next/Previous buttons
      */
-    function renderQuestions(questions) {
+    function renderSingleQuestion(index) {
+      currentQuestionIndex = index;
       const container = document.getElementById('questionsContainer');
       container.innerHTML = '';
 
-      questions.forEach((question, index) => {
-        const questionDiv = document.createElement('div');
-        questionDiv.className = 'question-item';
+      if (index >= currentQuestions.length) return;
 
-        const label = document.createElement('label');
-        label.textContent = question;
+      const question = currentQuestions[index];
+      
+      // Create question div
+      const questionDiv = document.createElement('div');
+      questionDiv.className = 'question-item';
 
-        const input = document.createElement('textarea');
-        input.className = 'question-answer';
-        input.placeholder = `Your answer to: ${question}`;
-        input.rows = '2';
-        input.dataset.questionIndex = index;
-        input.maxLength = '500';
+      // Question number indicator
+      const indicator = document.createElement('p');
+      indicator.style.fontSize = '0.9rem';
+      indicator.style.color = '#999';
+      indicator.style.marginBottom = '0.5rem';
+      indicator.textContent = `Question ${index + 1} of ${currentQuestions.length}`;
 
-        questionDiv.appendChild(label);
-        questionDiv.appendChild(input);
-        container.appendChild(questionDiv);
+      // Question label
+      const label = document.createElement('label');
+      label.textContent = question;
+      label.style.display = 'block';
+      label.style.marginBottom = '0.5rem';
+
+      // Answer textarea
+      const input = document.createElement('textarea');
+      input.className = 'question-answer';
+      input.id = `answer-${index}`;
+      input.placeholder = `Your answer to: ${question}`;
+      input.rows = '2';
+      input.maxLength = '500';
+      input.value = currentAnswers[index] || ''; // Restore answer if going back
+
+      // Save answer on input
+      input.addEventListener('input', function() {
+        currentAnswers[index] = this.value;
       });
+
+      questionDiv.appendChild(indicator);
+      questionDiv.appendChild(label);
+      questionDiv.appendChild(input);
+
+      // Create button container
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.display = 'flex';
+      buttonContainer.style.gap = '10px';
+      buttonContainer.style.marginTop = '1rem';
+
+      // Previous button (hidden on first question)
+      if (index > 0) {
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'chatbot-btn secondary';
+        prevBtn.textContent = '← Previous';
+        prevBtn.onclick = () => renderSingleQuestion(index - 1);
+        buttonContainer.appendChild(prevBtn);
+      }
+
+      // Next button (last question shows "Complete")
+      if (index < currentQuestions.length - 1) {
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'chatbot-btn primary';
+        nextBtn.textContent = 'Next →';
+        nextBtn.onclick = () => {
+          if (input.value.trim().length === 0) {
+            alert('Please answer this question before continuing.');
+            return;
+          }
+          renderSingleQuestion(index + 1);
+        };
+        buttonContainer.appendChild(nextBtn);
+      } else {
+        // On last question, show "Complete" button
+        const completeBtn = document.createElement('button');
+        completeBtn.className = 'chatbot-btn primary';
+        completeBtn.textContent = '✓ Complete & Analyze';
+        completeBtn.onclick = () => {
+          if (input.value.trim().length === 0) {
+            alert('Please answer this question before continuing.');
+            return;
+          }
+          handleAnalyze();
+        };
+        buttonContainer.appendChild(completeBtn);
+      }
+
+      questionDiv.appendChild(buttonContainer);
+      container.appendChild(questionDiv);
+
+      // Focus on textarea
+      input.focus();
     }
 
     /**
      * Handle "Analyze Symptoms" button click
      */
     async function handleAnalyze() {
-      const answers = Array.from(document.querySelectorAll('.question-answer'))
-        .map(el => el.value.trim());
-      const errorEl = document.getElementById('answersError');
-
-      // Clear previous errors
-      errorEl.style.display = 'none';
-      errorEl.textContent = '';
-
-      // Validate answers
-      if (answers.some(answer => answer.length === 0)) {
-        errorEl.textContent = 'Please answer all follow-up questions.';
-        errorEl.style.display = 'block';
+      // Validate all answers are filled
+      if (currentAnswers.some(answer => answer.trim().length === 0)) {
+        alert('Please answer all follow-up questions.');
         return;
       }
 
+      const errorEl = document.getElementById('answersError');
+      errorEl.style.display = 'none';
+      errorEl.textContent = '';
+
       // Show loading
-      currentAnswers = answers;
       showLoading('Analyzing your symptoms...');
 
       try {
-        const response = await analyzeSymptoms(currentSymptoms, answers);
+        const response = await analyzeSymptoms(currentSymptoms, currentAnswers);
         renderResults(response);
         switchStep('results');
         hideLoading();
@@ -369,6 +436,7 @@
       currentSymptoms = '';
       currentQuestions = [];
       currentAnswers = [];
+      currentQuestionIndex = 0;
       document.getElementById('symptomInput').value = '';
       document.getElementById('charCount').textContent = '0';
       switchStep('symptom-input');
