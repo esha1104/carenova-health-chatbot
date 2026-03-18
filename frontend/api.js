@@ -7,6 +7,25 @@ const API_BASE_URL = window.location.origin || 'http://localhost:8000';
 const API_TIMEOUT = 10000; // 10 seconds
 
 /**
+ * Get Firebase auth token for API requests
+ */
+async function getAuthToken() {
+  if (typeof firebase === 'undefined') {
+    return null;
+  }
+  
+  try {
+    const user = firebase.auth().currentUser;
+    if (user) {
+      return await user.getIdToken();
+    }
+  } catch (error) {
+    console.error('Error getting auth token:', error);
+  }
+  return null;
+}
+
+/**
  * Make a fetch request with timeout and error handling
  */
 async function fetchWithTimeout(url, options = {}) {
@@ -14,13 +33,21 @@ async function fetchWithTimeout(url, options = {}) {
   const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
 
   try {
+    // Get Firebase auth token if available
+    const authToken = await getAuthToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+    
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers: headers,
     });
 
     if (!response.ok) {

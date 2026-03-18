@@ -6,6 +6,10 @@
   <title>CareNova - Empathetic Disease Prediction</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet" />
+  
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <style>
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(30px); }
@@ -121,14 +125,16 @@
 
   <!-- Login -->
   <section id="login" class="login-container" data-aos="fade-up">
-    <h2>Login to CareNova</h2>
-    <input type="text" id="phoneNumber" placeholder="Enter Phone Number" required />
-    <button onclick="sendOTP()">Send OTP</button>
-
-    <input type="text" id="otp" placeholder="Enter OTP" required style="display: none;" />
-    <button id="verifyBtn" onclick="verifyOTP()" style="display: none;">Verify OTP</button>
-
-    <p id="message"></p>
+    <div id="auth-container">
+      <h2>Secure Login</h2>
+      <p>Login with your email to access the CareNova Health Assistant</p>
+      <button onclick="redirectToLogin()" class="get-started">Go to Login Page</button>
+    </div>
+    <div id="user-info" style="display: none; text-align: center;">
+      <h2>Welcome to CareNova</h2>
+      <p id="user-email"></p>
+      <button onclick="logoutUser()">Logout</button>
+    </div>
   </section>
 
   <!-- Chatbot Section -->
@@ -524,6 +530,50 @@
       e.preventDefault();
       document.getElementById('chatbot-section').scrollIntoView({ behavior: 'smooth' });
     });
+
+    // ========== FIREBASE AUTHENTICATION ==========
+    const firebaseConfig = {
+      apiKey: "AIzaSyBVNU3qsMJs6diyrmG9kax6Dz391JSKQDg",
+      authDomain: "otpp-9bb28.firebaseapp.com",
+      projectId: "otpp-9bb28",
+      storageBucket: "otpp-9bb28.appspot.com",
+      messagingSenderId: "714490495421",
+      appId: "1:714490495421:web:60b8b690d08a51812712d4"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+
+    // Check authentication status on page load
+    auth.onAuthStateChanged(function(user) {
+      if (user) {
+        // User is logged in
+        document.getElementById('auth-container').style.display = 'none';
+        document.getElementById('user-info').style.display = 'block';
+        document.getElementById('user-email').textContent = `Email: ${user.email}`;
+        document.getElementById('chatbot-section').style.display = 'block';
+      } else {
+        // User is not logged in
+        document.getElementById('auth-container').style.display = 'block';
+        document.getElementById('user-info').style.display = 'none';
+        document.getElementById('chatbot-section').style.display = 'none';
+      }
+    });
+
+    // Redirect to login page
+    function redirectToLogin() {
+      window.location.href = 'login.html';
+    }
+
+    // Logout function
+    function logoutUser() {
+      auth.signOut().then(() => {
+        // Let onAuthStateChanged listener handle UI update and navigation
+        console.log('User signed out successfully');
+      }).catch(error => {
+        alert('Error logging out: ' + error.message);
+      });
+    }
   </script>
 </body>
 </html>
